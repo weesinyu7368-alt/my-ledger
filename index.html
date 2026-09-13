@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b84ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.json">
+<title>我的记账</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f6f8;color:#17202a}
+.app{max-width:680px;margin:auto;min-height:100vh;padding-bottom:82px}
+header{background:#0b84ff;color:white;padding:22px 18px 18px;border-radius:0 0 24px 24px}
+h1{margin:0 0 5px;font-size:25px}.sub{opacity:.88;font-size:13px}
+main{padding:16px}.card{background:white;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px #0000000c}
+.total{font-size:32px;font-weight:800;margin-top:5px}.muted{color:#7a8591;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{padding:13px;background:#f7f9fb;border-radius:14px}.stat b{display:block;font-size:18px;margin-top:4px}
+button,input,select,textarea{font:inherit}button{border:0;border-radius:12px;padding:11px 14px;cursor:pointer}.primary{background:#0b84ff;color:#fff}.danger{background:#ffe9e9;color:#c62828}.secondary{background:#eef3f8;color:#263746}
+.row{display:flex;gap:9px;align-items:center}.between{justify-content:space-between}.actions{display:flex;gap:7px}
+nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);background:#fff;border-top:1px solid #ddd;display:grid;grid-template-columns:repeat(3,1fr);padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:5}
+nav button{background:transparent;color:#687582}nav button.active{color:#0b84ff;font-weight:700}
+label{display:block;font-size:13px;color:#65717d;margin:11px 0 5px}input,select,textarea{width:100%;padding:12px;border:1px solid #dbe1e6;border-radius:12px;background:#fff}textarea{min-height:80px;resize:vertical}
+.record{padding:12px 0;border-bottom:1px solid #edf0f2}.record:last-child{border-bottom:0}.amount{font-weight:800}
+canvas{width:100%;height:240px;border-radius:12px;background:#fbfcfd}
+.hidden{display:none}.pill{font-size:12px;background:#eaf4ff;color:#0875df;padding:5px 8px;border-radius:20px}
+.empty{text-align:center;padding:30px;color:#87919b}
+</style>
+</head>
+<body>
+<div class="app">
+<header><h1>我的记账</h1><div class="sub">简单记录每天的每一笔支出</div></header>
+<main id="home"></main>
+<main id="records" class="hidden"></main>
+<main id="stats" class="hidden"></main>
+</div>
+<nav>
+<button id="nHome" class="active" onclick="showPage('home')">首页</button>
+<button id="nRecords" onclick="showPage('records')">账目</button>
+<button id="nStats" onclick="showPage('stats')">统计</button>
+</nav>
+<script>
+const KEY="my-ledger-expenses-v1";
+let data=JSON.parse(localStorage.getItem(KEY)||"[]");
+const cats=["餐饮","交通","购物","生活","娱乐","医疗","其他"];
+const $=id=>document.getElementById(id);
+const money=n=>"NT$ "+Number(n||0).toLocaleString("zh-TW",{minimumFractionDigits:0});
+const today=()=>{let d=new Date();return d.toISOString().slice(0,10)};
+function save(){localStorage.setItem(KEY,JSON.stringify(data));render()}
+function showPage(p){
+ ["home","records","stats"].forEach(x=>$(x).classList.toggle("hidden",x!==p));
+ ["nHome","nRecords","nStats"].forEach(x=>$(x).classList.remove("active"));
+ $("n"+p[0].toUpperCase()+p.slice(1)).classList.add("active"); render();
+}
+function addForm(item=null){
+ let e=item||{date:today(),time:new Date().toTimeString().slice(0,5),category:"餐饮",amount:"",note:""};
+ $("home").innerHTML=`<div class="card"><div class="row between"><h2>${item?"编辑账目":"新增支出"}</h2><button class="secondary" onclick="render()">返回</button></div>
+ <label>金额</label><input id="amount" type="number" inputmode="decimal" step="0.01" value="${e.amount}" placeholder="请输入金额">
+ <label>日期</label><input id="date" type="date" value="${e.date}">
+ <label>时间</label><input id="time" type="time" value="${e.time}">
+ <label>类别</label><select id="category">${cats.map(c=>`<option ${c===e.category?"selected":""}>${c}</option>`).join("")}</select>
+ <label>备注</label><textarea id="note" placeholder="可不填写">${e.note||""}</textarea>
+ <button class="primary" style="width:100%;margin-top:14px" onclick="saveItem(${item?item.id:"null"})">${item?"保存修改":"保存支出"}</button>
+ </div>`;
+}
+function saveItem(id){
+ let amount=Number($("amount").value);
+ if(!(amount>0)){alert("请输入大于 0 的金额");return}
+ let obj={id:id||Date.now(),amount,date:$("date").value,time:$("time").value,category:$("category").value,note:$("note").value};
+ if(id){let i=data.findIndex(x=>x.id===id);if(i>=0)data[i]=obj}else data.push(obj);
+ save(); showPage("home");
+}
+function del(id){if(confirm("确定删除这笔记录吗？")){data=data.filter(x=>x.id!==id);save()}}
+function edit(id){let x=data.find(a=>a.id===id);if(x)addForm(x)}
+function render(){
+ if(!$("home").classList.contains("hidden")) renderHome();
+ if(!$("records").classList.contains("hidden")) renderRecords();
+ if(!$("stats").classList.contains("hidden")) renderStats();
+}
+function renderHome(){
+ let t=today(), day=data.filter(x=>x.date===t), total=day.reduce((s,x)=>s+x.amount,0);
+ let week=[];for(let i=6;i>=0;i--){let d=new Date();d.setDate(d.getDate()-i);let ds=d.toISOString().slice(0,10);week.push(data.filter(x=>x.date===ds).reduce((s,x)=>s+x.amount,0))}
+ let month=t.slice(0,7), mt=data.filter(x=>x.date.startsWith(month)).reduce((s,x)=>s+x.amount,0);
+ $("home").innerHTML=`<div class="card"><div class="muted">今天 ${t}</div><div class="total">${money(total)}</div><div class="grid" style="margin-top:15px"><div class="stat"><span class="muted">7天</span><b>${money(week.reduce((a,b)=>a+b,0))}</b></div><div class="stat"><span class="muted">本月</span><b>${money(mt)}</b></div><div class="stat"><span class="muted">笔数</span><b>${day.length}</b></div></div></div>
+ <div class="card"><button class="primary" style="width:100%" onclick="addForm()">＋ 记录一笔支出</button></div>
+ <div class="card"><div class="row between"><h3>今天的记录</h3><span class="pill">${day.length} 笔</span></div>
+ ${day.sort((a,b)=>b.time.localeCompare(a.time)).map(r=>recordHTML(r)).join("")||'<div class="empty">今天还没有记账</div>'}</div>
+ <div class="card"><h3>数据管理</h3><div class="row" style="flex-wrap:wrap"><button class="secondary" onclick="exportCSV()">导出 CSV</button><button class="secondary" onclick="backup()">备份 JSON</button><label style="margin:0"><button class="secondary" onclick="$('restore').click()">恢复备份</button></label><input id="restore" type="file" accept=".json" hidden onchange="restore(this)"></div></div>`;
+}
+function recordHTML(r){return `<div class="record"><div class="row between"><div><b>${r.category}</b><div class="muted">${r.date} ${r.time}${r.note?" · "+r.note:""}</div></div><div class="row"><span class="amount">${money(r.amount)}</span><button class="secondary" onclick="edit(${r.id})">编辑</button><button class="danger" onclick="del(${r.id})">删</button></div></div>`}
+function renderRecords(){
+ let q=($("search")?.value||"").toLowerCase();let arr=data.filter(r=>(r.category+r.note+r.date).toLowerCase().includes(q)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+ $("records").innerHTML=`<div class="card"><div class="row between"><h2>全部账目</h2><button class="primary" onclick="addForm();showPage('home')">＋新增</button></div><input id="search" placeholder="搜索类别、备注或日期" value="${q}" oninput="renderRecords()"></div><div class="card">${arr.map(recordHTML).join("")||'<div class="empty">没有符合条件的记录</div>'}</div>`;
+}
+function renderStats(){
+ let month=today().slice(0,7), arr=data.filter(x=>x.date.startsWith(month)), by={};cats.forEach(c=>by[c]=0);arr.forEach(x=>by[x.category]=(by[x.category]||0)+x.amount);
+ $("stats").innerHTML=`<div class="card"><div class="row between"><h2>本月趋势</h2><span class="pill">${month}</span></div><canvas id="chart" width="640" height="260"></canvas></div><div class="card"><h3>类别统计</h3>${cats.map(c=>`<div class="row between" style="padding:9px 0;border-bottom:1px solid #eee"><span>${c}</span><b>${money(by[c])}</b></div>`).join("")}</div>`;
+ drawChart(month);
+}
+function drawChart(month){
+ let c=$("chart"),ctx=c.getContext("2d"),w=c.width,h=c.height,p=35;ctx.clearRect(0,0,w,h);
+ let days=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate(), vals=[];
+ for(let d=1;d<=days;d++){let ds=month+"-"+String(d).padStart(2,"0");vals.push(data.filter(x=>x.date===ds).reduce((s,x)=>s+x.amount,0))}
+ let max=Math.max(...vals,1);ctx.strokeStyle="#d8dee5";ctx.lineWidth=1;for(let i=0;i<4;i++){let y=p+(h-2*p)*i/3;ctx.beginPath();ctx.moveTo(p,y);ctx.lineTo(w-p,y);ctx.stroke()}
+ ctx.strokeStyle="#0b84ff";ctx.lineWidth=3;ctx.beginPath();vals.forEach((v,i)=>{let x=p+(w-2*p)*i/(days-1||1),y=h-p-(h-2*p)*v/max;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+ ctx.fillStyle="#0b84ff";vals.forEach((v,i)=>{if(v>0){let x=p+(w-2*p)*i/(days-1||1),y=h-p-(h-2*p)*v/max;ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill()}});
+ ctx.fillStyle="#65717d";ctx.font="12px sans-serif";[1,Math.ceil(days/2),days].forEach(d=>{let x=p+(w-2*p)*(d-1)/(days-1||1);ctx.fillText(d+"日",x-10,h-10)})
+}
+function exportCSV(){let rows=[["日期","时间","类别","金额","备注"],...data.sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).map(x=>[x.date,x.time,x.category,x.amount,x.note||""])];let csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");download("我的记账.csv",new Blob([csv],{type:"text/csv;charset=utf-8"}))}
+function backup(){download("我的记账备份.json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}))}
+function restore(inp){let f=inp.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>{try{let x=JSON.parse(rd.result);if(!Array.isArray(x))throw 0;data=x;save();alert("恢复成功")}catch(e){alert("备份文件格式不正确")}};rd.readAsText(f)}
+function download(name,blob){let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+if("serviceWorker"in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+render();
+</script>
+</body>
+</html>
