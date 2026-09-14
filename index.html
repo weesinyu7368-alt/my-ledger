@@ -46,6 +46,7 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
 .modal.show{display:flex}.sheet{background:#fff;width:min(900px,100%);border-radius:30px 30px 0 0;padding:24px;max-height:92vh;overflow:auto}
 .sheet h2{font-size:28px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.formgrid .wide{grid-column:1/-1}.actions{display:flex;gap:10px;margin-top:18px}.actions button{flex:1}
 .notice{background:#eef7ff;border-radius:18px;padding:13px 15px;color:#1f6fbf;margin-bottom:15px}
+.ratebox{background:#f4f8fb;border-radius:20px;padding:15px;margin-top:12px}.ratebox b{font-size:20px}.rate-status{font-size:13px;color:var(--muted);margin-top:5px}
 .monthrow{display:flex;gap:10px;align-items:center}.monthrow .select{max-width:180px}
 .nojs{padding:20px}
 @media(max-width:650px){
@@ -71,7 +72,7 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
    <div class="stat"><span class="muted">笔数</span><b id="monthCount">0</b></div>
   </div>
  </div>
- <div class="card"><button class="primary full" onclick="openAdd()">＋ 记录一笔支出</button></div>
+ <div class="card"><button class="primary full" onclick="openAdd()">＋ 记录一笔支出</button><div class="ratebox"><b>💱 即时汇率</b><div id="rateStatus" class="rate-status">正在读取即时汇率…</div></div></div>
  <div class="card">
   <div class="row between"><h2>今天的记录</h2><span class="notice" id="todayCount">0 笔</span></div>
   <div id="todayList"></div>
@@ -120,22 +121,43 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
  <div class="sheet">
   <div class="row between"><h2 id="modalTitle">新增支出</h2><button class="ghost" onclick="closeModal()">关闭</button></div>
   <div class="formgrid">
-   <label>金额<input id="fAmount" class="input" type="number" min="0" step="1" inputmode="decimal" placeholder="例如 100"></label>
+   <label>金额<input id="fAmount" class="input" type="number" min="0" step="0.01" inputmode="decimal" placeholder="例如 100" oninput="updateAmountPreview()"></label>
+   <label>货币<select id="fCurrency" class="select" onchange="updateAmountPreview()"></select></label>
    <label>类别<select id="fCategory" class="select"></select></label>
    <label>日期<input id="fDate" class="input" type="date"></label>
    <label>时间<input id="fTime" class="input" type="time"></label>
    <label class="wide">备注<input id="fNote" class="input" placeholder="可填写店名、用途等"></label>
   </div>
+  <div id="amountPreview" class="ratebox"><b>换算为 NT$ 0</b><div class="rate-status">正在读取即时汇率…</div></div>
   <div class="actions"><button class="ghost" onclick="closeModal()">取消</button><button class="primary" onclick="saveRecord()">保存</button></div>
  </div>
 </div>
 
 <script>
 const CATEGORIES=["餐饮","交通","购物","生活","娱乐","医疗","其他"];
+const CURRENCIES=[
+ {code:"TWD",name:"新台币",symbol:"NT$",flag:"🇹🇼"},
+ {code:"MYR",name:"马来西亚令吉",symbol:"RM",flag:"🇲🇾"},
+ {code:"USD",name:"美元",symbol:"US$",flag:"🇺🇸"},
+ {code:"JPY",name:"日圆",symbol:"¥",flag:"🇯🇵"},
+ {code:"CNY",name:"人民币",symbol:"¥",flag:"🇨🇳"},
+ {code:"HKD",name:"港币",symbol:"HK$",flag:"🇭🇰"},
+ {code:"SGD",name:"新加坡元",symbol:"S$",flag:"🇸🇬"},
+ {code:"KRW",name:"韩元",symbol:"₩",flag:"🇰🇷"},
+ {code:"EUR",name:"欧元",symbol:"€",flag:"🇪🇺"},
+ {code:"GBP",name:"英镑",symbol:"£",flag:"🇬🇧"},
+ {code:"AUD",name:"澳元",symbol:"A$",flag:"🇦🇺"},
+ {code:"CAD",name:"加元",symbol:"C$",flag:"🇨🇦"},
+ {code:"THB",name:"泰铢",symbol:"฿",flag:"🇹🇭"},
+ {code:"VND",name:"越南盾",symbol:"₫",flag:"🇻🇳"}
+];
 const STORAGE_KEY="my-ledger-data-v3";
-let records=[], editingId=null;
+const RATE_CACHE_KEY="my-ledger-rates-v1";
+let records=[], editingId=null, rates={TWD:1}, rateDate="", ratesReady=false;
 
-function money(n){return "NT$ "+Number(n||0).toLocaleString("zh-TW",{maximumFractionDigits:0})}
+function currencyInfo(code){return CURRENCIES.find(c=>c.code===code)||CURRENCIES[0]}
+function money(n,currency="TWD"){const c=currencyInfo(currency);return c.symbol+" "+Number(n||0).toLocaleString("zh-TW",{maximumFractionDigits:2})}
+function toTWD(amount,currency){if(currency==="TWD")return Number(amount)||0;const r=Number(rates[currency]);return r>0?(Number(amount)||0)/r:null}
 function pad(n){return String(n).padStart(2,"0")}
 function dateKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function nowDate(){return dateKey(new Date())}
@@ -147,7 +169,7 @@ function normalize(x){
  const amount=Number(x.amount??x.money??x.price??x.value);
  const date=String(x.date??x.day??x.createdAt??"").slice(0,10);
  if(!Number.isFinite(amount)||amount<0||!date.match(/^\d{4}-\d{2}-\d{2}$/)) return null;
- return {id:String(x.id??(Date.now()+Math.random())),amount,category:String(x.category??x.type??"其他"),note:String(x.note??x.remark??x.memo??""),date,time:String(x.time??"12:00").slice(0,5)};
+ return {id:String(x.id??(Date.now()+Math.random())),amount, currency:String(x.currency??"TWD"),category:String(x.category??x.type??"其他"),note:String(x.note??x.remark??x.memo??""),date,time:String(x.time??"12:00").slice(0,5)};
 }
 function load(){
  try{
@@ -164,6 +186,43 @@ function load(){
  save();
 }
 function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}
+async function loadRates(){
+ ratesReady=false;
+ try{
+  const cached=JSON.parse(localStorage.getItem(RATE_CACHE_KEY)||"null");
+  if(cached&&cached.rates){rates=cached.rates;rateDate=cached.date||"";}
+ }catch(e){}
+ try{
+  const quotes=CURRENCIES.filter(c=>c.code!=="TWD").map(c=>c.code).join(",");
+  const res=await fetch("https://api.frankfurter.dev/v2/rates?base=TWD&quotes="+encodeURIComponent(quotes),{cache:"no-store"});
+  if(!res.ok)throw new Error("rate request failed");
+  const data=await res.json();
+  const next={TWD:1};
+  (data.rates||[]).forEach(x=>{if(x.quote&&Number(x.rate)>0)next[x.quote]=Number(x.rate)});
+  if(Object.keys(next).length>1){rates=next;rateDate=data.date||"";localStorage.setItem(RATE_CACHE_KEY,JSON.stringify({rates, date:rateDate, savedAt:Date.now()}));}
+ }catch(e){}
+ ratesReady=true;
+ updateRateStatus();
+ renderAll();
+}
+function updateRateStatus(){
+ const el=document.getElementById("rateStatus");
+ if(el){el.textContent=rateDate?("即时汇率已更新："+rateDate+(Object.keys(rates).length>1?" · 联网失败时会使用上次汇率":"")):"尚未取得联网汇率";}
+ updateAmountPreview();
+}
+function updateAmountPreview(){
+ const box=document.getElementById("amountPreview");if(!box)return;
+ const amount=Number(document.getElementById("fAmount").value)||0;
+ const currency=document.getElementById("fCurrency").value||"TWD";
+ const converted=toTWD(amount,currency);
+ const c=currencyInfo(currency);
+ box.innerHTML=converted==null?`<b>${c.symbol} ${amount.toLocaleString("zh-TW")} ${currency}</b><div class="rate-status">目前无法取得 ${currency} → TWD 汇率，保存后仍会保留原货币金额。</div>`:`<b>${money(amount,currency)} ≈ NT$ ${converted.toLocaleString("zh-TW",{maximumFractionDigits:2})}</b><div class="rate-status">${currency==="TWD"?"本身就是新台币":"按当前可用汇率换算"}${rateDate?" · "+rateDate:""}</div>`;
+}
+function fillCurrencies(){
+ const el=document.getElementById("fCurrency");
+ if(el)el.innerHTML=CURRENCIES.map(c=>`<option value="${c.code}">${c.flag} ${c.code} · ${c.name} (${c.symbol})</option>`).join("");
+}
+
 function fillCategories(){
  const opts='<option value="全部">全部类别</option>'+CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("");
  document.getElementById("filterCat").innerHTML=opts;
@@ -181,19 +240,19 @@ function showView(v){
 }
 function renderHome(){
  const today=nowDate(), d=new Date(), week=new Date();week.setDate(d.getDate()-6);
- const day=records.filter(r=>r.date===today), weekSum=records.filter(r=>parseDate(r)>=new Date(week.getFullYear(),week.getMonth(),week.getDate())).reduce((a,r)=>a+r.amount,0);
+ const day=records.filter(r=>r.date===today), weekSum=records.filter(r=>parseDate(r)>=new Date(week.getFullYear(),week.getMonth(),week.getDate())).reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0);
  const month=records.filter(r=>r.date.slice(0,7)===today.slice(0,7));
  document.getElementById("today").textContent=today;
- document.getElementById("todayTotal").textContent=money(day.reduce((a,r)=>a+r.amount,0));
+ document.getElementById("todayTotal").textContent=money(day.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
  document.getElementById("weekTotal").textContent=money(weekSum);
- document.getElementById("monthTotal").textContent=money(month.reduce((a,r)=>a+r.amount,0));
+ document.getElementById("monthTotal").textContent=money(month.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
  document.getElementById("monthCount").textContent=month.length;
  document.getElementById("todayCount").textContent=day.length+" 笔";
  const box=document.getElementById("todayList");
  box.innerHTML=day.sort((a,b)=>parseDate(b)-parseDate(a)).map(rowHtml).join("")||'<div class="empty">今天还没有记录</div>';
 }
 function rowHtml(r){
- return `<div class="account"><div><div class="cat">${escapeHtml(r.category)}</div><div class="muted">${r.date} ${r.time}${r.note?` · ${escapeHtml(r.note)}`:""}</div></div><div class="amount">${money(r.amount)}</div><button class="edit" onclick="openEdit('${r.id}')">编辑</button><button class="del" onclick="removeRecord('${r.id}')">删</button></div>`;
+ const cur=r.currency||"TWD", converted=toTWD(r.amount,cur); return `<div class="account"><div><div class="cat">${escapeHtml(r.category)}</div><div class="muted">${r.date} ${r.time}${r.note?` · ${escapeHtml(r.note)}`:""}</div></div><div class="amount">${money(r.amount,cur)}${cur!=="TWD"&&converted!=null?`<div class="muted small">≈ NT$ ${converted.toLocaleString("zh-TW",{maximumFractionDigits:2})}</div>`:""}</div><button class="edit" onclick="openEdit('${r.id}')">编辑</button><button class="del" onclick="removeRecord('${r.id}')">删</button></div>`;
 }
 function renderAccounts(){
  const q=(document.getElementById("search").value||"").trim().toLowerCase(), cat=document.getElementById("filterCat").value;
@@ -213,20 +272,20 @@ function clearFilters(){
 }
 function openAdd(){
  editingId=null;document.getElementById("modalTitle").textContent="新增支出";
- document.getElementById("fAmount").value="";document.getElementById("fCategory").value="餐饮";document.getElementById("fDate").value=nowDate();
+ document.getElementById("fAmount").value="";document.getElementById("fCurrency").value="TWD";document.getElementById("fCategory").value="餐饮";document.getElementById("fDate").value=nowDate();
  const d=new Date();document.getElementById("fTime").value=pad(d.getHours())+":"+pad(d.getMinutes());document.getElementById("fNote").value="";
  document.getElementById("modal").classList.add("show");
 }
 function openEdit(id){
  const r=records.find(x=>x.id===id);if(!r)return;editingId=id;
- document.getElementById("modalTitle").textContent="编辑支出";document.getElementById("fAmount").value=r.amount;document.getElementById("fCategory").value=CATEGORIES.includes(r.category)?r.category:"其他";
+ document.getElementById("modalTitle").textContent="编辑支出";document.getElementById("fAmount").value=r.amount;document.getElementById("fCurrency").value=CURRENCIES.some(c=>c.code===(r.currency||"TWD"))?(r.currency||"TWD"):"TWD";document.getElementById("fCategory").value=CATEGORIES.includes(r.category)?r.category:"其他";
  document.getElementById("fDate").value=r.date;document.getElementById("fTime").value=r.time;document.getElementById("fNote").value=r.note;document.getElementById("modal").classList.add("show");
 }
 function closeModal(){document.getElementById("modal").classList.remove("show")}
 function saveRecord(){
  const amount=Number(document.getElementById("fAmount").value),date=document.getElementById("fDate").value;
  if(!Number.isFinite(amount)||amount<0||!date){alert("请填写正确的金额和日期");return}
- const data={amount,category:document.getElementById("fCategory").value,date,time:document.getElementById("fTime").value||"12:00",note:document.getElementById("fNote").value.trim()};
+ const data={amount,currency:document.getElementById("fCurrency").value||"TWD",category:document.getElementById("fCategory").value,date,time:document.getElementById("fTime").value||"12:00",note:document.getElementById("fNote").value.trim()};
  if(editingId){const i=records.findIndex(r=>r.id===editingId);if(i>=0)records[i]={...records[i],...data}}
  else records.push({id:String(Date.now()+Math.random()),...data});
  save();closeModal();renderAll();
@@ -242,11 +301,11 @@ function monthOptions(){
 }
 function renderStats(){
  monthOptions();const m=document.getElementById("statMonth").value||nowDate().slice(0,7), a=records.filter(r=>r.date.slice(0,7)===m);
- const total=a.reduce((s,r)=>s+r.amount,0),days=[...new Set(a.map(r=>r.date))].length,avg=days?total/days:0,max=a.reduce((z,r)=>Math.max(z,r.amount),0);
+ const total=a.reduce((s,r)=>s+(toTWD(r.amount,r.currency||"TWD")??0),0),days=[...new Set(a.map(r=>r.date))].length,avg=days?total/days:0,max=a.reduce((z,r)=>Math.max(z,toTWD(r.amount,r.currency||"TWD")??0),0);
  document.getElementById("sTotal").textContent=money(total);document.getElementById("sAvg").textContent=money(avg);document.getElementById("sMax").textContent=money(max);
  const daysInMonth=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),0).getDate();document.getElementById("monthEnd").textContent=daysInMonth+"日";
- const daily=Array.from({length:daysInMonth},()=>0);a.forEach(r=>{daily[Number(r.date.slice(8,10))-1]+=r.amount});drawChart(daily);
- const cats={};a.forEach(r=>cats[r.category]=(cats[r.category]||0)+r.amount);const entries=Object.entries(cats).sort((x,y)=>y[1]-x[1]);
+ const daily=Array.from({length:daysInMonth},()=>0);a.forEach(r=>{daily[Number(r.date.slice(8,10))-1]+=toTWD(r.amount,r.currency||"TWD")??0});drawChart(daily);
+ const cats={};a.forEach(r=>cats[r.category]=(cats[r.category]||0)+(toTWD(r.amount,r.currency||"TWD")??0));const entries=Object.entries(cats).sort((x,y)=>y[1]-x[1]);
  document.getElementById("categoryStats").innerHTML=(entries.length?entries:CATEGORIES.map(c=>[c,0])).map(([c,v])=>`<div style="margin:16px 0"><div class="row between"><b>${escapeHtml(c)}</b><b>${money(v)}</b></div><div class="bar"><i style="width:${total?Math.min(100,v/Math.max(...entries.map(x=>x[1]),1)*100):0}%"></i></div></div>`).join("");
  document.getElementById("categoryRank").innerHTML=entries.map(([c,v],i)=>`<div class="rank"><div class="ranknum">${i+1}</div><div><b>${escapeHtml(c)}</b><div class="bar" style="margin-top:6px"><i style="width:${entries[0][1]?v/entries[0][1]*100:0}%"></i></div></div><b>${money(v)}</b></div>`).join("")||'<div class="empty">本月没有支出</div>';
  document.getElementById("statRecords").innerHTML=a.sort((x,y)=>parseDate(y)-parseDate(x)).map(rowHtml).join("")||'<div class="empty">本月没有记录</div>';
@@ -262,9 +321,10 @@ function drawChart(data){
  ctx.fillStyle="#0b84ff";pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5,0,Math.PI*2);ctx.fill()});
 }
 function renderAll(){renderHome();renderAccounts();monthOptions();if(document.getElementById("stats").classList.contains("active"))renderStats()}
-fillCategories();load();renderAll();monthOptions();renderStats();
+fillCategories();fillCurrencies();load();renderAll();monthOptions();renderStats();updateRateStatus();loadRates();
 window.addEventListener("resize",()=>{if(document.getElementById("stats").classList.contains("active"))renderStats()});
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+setInterval(loadRates,30*60*1000);
 </script>
 </body>
 </html>
