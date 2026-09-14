@@ -65,7 +65,7 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
 <section id="home" class="view active">
  <div class="card">
   <div class="muted">今天 <span id="today"></span></div>
-  <div class="big" id="todayTotal">NT$ 0</div>
+  <div class="big" id="todayTotal">NT$ 0</div><div class="monthrow"><span class="muted">总金额显示货币</span><select id="homeDisplayCurrency" class="select" onchange="setDisplayCurrency(this.value)"></select></div>
   <div class="grid3">
    <div class="stat"><span class="muted">7天</span><b id="weekTotal">NT$ 0</b></div>
    <div class="stat"><span class="muted">本月</span><b id="monthTotal">NT$ 0</b></div>
@@ -101,7 +101,7 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
 
 <section id="stats" class="view">
  <div class="card">
-  <div class="row between"><h2>详细统计</h2><div class="monthrow"><span class="muted">月份</span><select id="statMonth" class="select" onchange="renderStats()"></select></div></div>
+  <div class="row between"><h2>详细统计</h2><div class="monthrow"><span class="muted">月份</span><select id="statMonth" class="select" onchange="renderStats()"></select></div></div><div class="monthrow" style="margin-top:10px"><span class="muted">统计显示货币</span><select id="statsDisplayCurrency" class="select" onchange="setDisplayCurrency(this.value)"></select></div>
   <div class="grid3">
    <div class="stat"><span class="muted">本月支出</span><b id="sTotal">NT$ 0</b></div>
    <div class="stat"><span class="muted">平均每日</span><b id="sAvg">NT$ 0</b></div>
@@ -154,10 +154,13 @@ const CURRENCIES=[
 const STORAGE_KEY="my-ledger-data-v3";
 const RATE_CACHE_KEY="my-ledger-rates-v1";
 let records=[], editingId=null, rates={TWD:1}, rateDate="", ratesReady=false;
+let displayCurrency=localStorage.getItem("my-ledger-display-currency-v1")||"TWD";
 
 function currencyInfo(code){return CURRENCIES.find(c=>c.code===code)||CURRENCIES[0]}
 function money(n,currency="TWD"){const c=currencyInfo(currency);return c.symbol+" "+Number(n||0).toLocaleString("zh-TW",{maximumFractionDigits:2})}
 function toTWD(amount,currency){if(currency==="TWD")return Number(amount)||0;const r=Number(rates[currency]);return r>0?(Number(amount)||0)/r:null}
+function fromTWD(amount,currency){if(currency==="TWD")return Number(amount)||0;const r=Number(rates[currency]);return r>0?(Number(amount)||0)*r:null}
+function displayMoney(twd){const v=fromTWD(twd,displayCurrency);return v==null?"暂时无法换算":money(v,displayCurrency)}
 function pad(n){return String(n).padStart(2,"0")}
 function dateKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function nowDate(){return dateKey(new Date())}
@@ -194,22 +197,59 @@ async function loadRates(){
  }catch(e){}
  try{
   const quotes=CURRENCIES.filter(c=>c.code!=="TWD").map(c=>c.code).join(",");
-  const res=await fetch("https://api.frankfurter.dev/v2/rates?base=TWD&quotes="+encodeURIComponent(quotes),{cache:"no-store"});
-  if(!res.ok)throw new Error("rate request failed");
+  const url="https://api.frankfurter.dev/v2/rates?base=TWD&quotes="+encodeURIComponent(quotes);
+  const res=await fetch(url,{cache:"no-store"});
+  if(!res.ok)throw new Error("rate request failed: "+res.status);
   const data=await res.json();
+  // Frankfurter v2 returns an array like [{base,quote,rate,date}, ...].
+  // Keep a fallback for object-shaped responses as well.
   const next={TWD:1};
-  (data.rates||[]).forEach(x=>{if(x.quote&&Number(x.rate)>0)next[x.quote]=Number(x.rate)});
-  if(Object.keys(next).length>1){rates=next;rateDate=data.date||"";localStorage.setItem(RATE_CACHE_KEY,JSON.stringify({rates, date:rateDate, savedAt:Date.now()}));}
- }catch(e){}
+  if(Array.isArray(data)){
+   data.forEach(x=>{if(x&&x.quote&&Number(x.rate)>0)next[String(x.quote).toUpperCase()]=Number(x.rate)});
+   const first=data.find(x=>x&&x.date);
+   if(first)rateDate=first.date||rateDate;
+  }else if(data&&data.rates){
+   Object.entries(data.rates).forEach(([k,v])=>{if(Number(v)>0)next[String(k).toUpperCase()]=Number(v)});
+   rateDate=data.date||rateDate;
+  }
+  if(Object.keys(next).length>1){
+   rates=next;
+   localStorage.setItem(RATE_CACHE_KEY,JSON.stringify({rates, date:rateDate, savedAt:Date.now()}));
+  }
+ }catch(e){
+  // Cached rates remain available when the network is unavailable.
+ }
  ratesReady=true;
  updateRateStatus();
  renderAll();
 }
+
 function updateRateStatus(){
  const el=document.getElementById("rateStatus");
- if(el){el.textContent=rateDate?("即时汇率已更新："+rateDate+(Object.keys(rates).length>1?" · 联网失败时会使用上次汇率":"")):"尚未取得联网汇率";}
+ if(el){
+  el.textContent=rateDate?((Object.keys(rates).length>1?"最新汇率已更新：":"汇率缓存：")+rateDate+" · 无网络时继续使用上次汇率") : "尚未取得联网汇率";
+ }
+ fillDisplayCurrencies();
  updateAmountPreview();
 }
+function fillDisplayCurrencies(){
+ const ids=["homeDisplayCurrency","statsDisplayCurrency"];
+ ids.forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  const old=el.value||displayCurrency;
+  el.innerHTML=CURRENCIES.map(c=>`<option value="${c.code}" ${c.code===old?"selected":""}>${c.flag} ${c.code} · ${c.name}</option>`).join("");
+  el.value=CURRENCIES.some(c=>c.code===old)?old:displayCurrency;
+ });
+}
+function setDisplayCurrency(code){
+ if(!CURRENCIES.some(c=>c.code===code))return;
+ displayCurrency=code;
+ localStorage.setItem("my-ledger-display-currency-v1",code);
+ fillDisplayCurrencies();
+ renderAll();
+}
+
 function updateAmountPreview(){
  const box=document.getElementById("amountPreview");if(!box)return;
  const amount=Number(document.getElementById("fAmount").value)||0;
@@ -243,16 +283,16 @@ function renderHome(){
  const day=records.filter(r=>r.date===today), weekSum=records.filter(r=>parseDate(r)>=new Date(week.getFullYear(),week.getMonth(),week.getDate())).reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0);
  const month=records.filter(r=>r.date.slice(0,7)===today.slice(0,7));
  document.getElementById("today").textContent=today;
- document.getElementById("todayTotal").textContent=money(day.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
- document.getElementById("weekTotal").textContent=money(weekSum);
- document.getElementById("monthTotal").textContent=money(month.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
+ document.getElementById("todayTotal").textContent=displayMoney(day.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
+ document.getElementById("weekTotal").textContent=displayMoney(weekSum);
+ document.getElementById("monthTotal").textContent=displayMoney(month.reduce((a,r)=>a+(toTWD(r.amount,r.currency||"TWD")??0),0));
  document.getElementById("monthCount").textContent=month.length;
  document.getElementById("todayCount").textContent=day.length+" 笔";
  const box=document.getElementById("todayList");
  box.innerHTML=day.sort((a,b)=>parseDate(b)-parseDate(a)).map(rowHtml).join("")||'<div class="empty">今天还没有记录</div>';
 }
 function rowHtml(r){
- const cur=r.currency||"TWD", converted=toTWD(r.amount,cur); return `<div class="account"><div><div class="cat">${escapeHtml(r.category)}</div><div class="muted">${r.date} ${r.time}${r.note?` · ${escapeHtml(r.note)}`:""}</div></div><div class="amount">${money(r.amount,cur)}${cur!=="TWD"&&converted!=null?`<div class="muted small">≈ NT$ ${converted.toLocaleString("zh-TW",{maximumFractionDigits:2})}</div>`:""}</div><button class="edit" onclick="openEdit('${r.id}')">编辑</button><button class="del" onclick="removeRecord('${r.id}')">删</button></div>`;
+ const cur=r.currency||"TWD", converted=toTWD(r.amount,cur), shown=converted==null?null:fromTWD(converted,displayCurrency); return `<div class="account"><div><div class="cat">${escapeHtml(r.category)}</div><div class="muted">${r.date} ${r.time}${r.note?` · ${escapeHtml(r.note)}`:""}</div></div><div class="amount">${money(r.amount,cur)}${shown!=null&&displayCurrency!==cur?`<div class="muted small">≈ ${money(shown,displayCurrency)}</div>`:""}</div><button class="edit" onclick="openEdit('${r.id}')">编辑</button><button class="del" onclick="removeRecord('${r.id}')">删</button></div>`;
 }
 function renderAccounts(){
  const q=(document.getElementById("search").value||"").trim().toLowerCase(), cat=document.getElementById("filterCat").value;
@@ -302,11 +342,11 @@ function monthOptions(){
 function renderStats(){
  monthOptions();const m=document.getElementById("statMonth").value||nowDate().slice(0,7), a=records.filter(r=>r.date.slice(0,7)===m);
  const total=a.reduce((s,r)=>s+(toTWD(r.amount,r.currency||"TWD")??0),0),days=[...new Set(a.map(r=>r.date))].length,avg=days?total/days:0,max=a.reduce((z,r)=>Math.max(z,toTWD(r.amount,r.currency||"TWD")??0),0);
- document.getElementById("sTotal").textContent=money(total);document.getElementById("sAvg").textContent=money(avg);document.getElementById("sMax").textContent=money(max);
+ document.getElementById("sTotal").textContent=displayMoney(total);document.getElementById("sAvg").textContent=displayMoney(avg);document.getElementById("sMax").textContent=displayMoney(max);
  const daysInMonth=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),0).getDate();document.getElementById("monthEnd").textContent=daysInMonth+"日";
- const daily=Array.from({length:daysInMonth},()=>0);a.forEach(r=>{daily[Number(r.date.slice(8,10))-1]+=toTWD(r.amount,r.currency||"TWD")??0});drawChart(daily);
+ const daily=Array.from({length:daysInMonth},()=>0);a.forEach(r=>{daily[Number(r.date.slice(8,10))-1]+=toTWD(r.amount,r.currency||"TWD")??0});drawChart(daily.map(v=>fromTWD(v,displayCurrency)??0));
  const cats={};a.forEach(r=>cats[r.category]=(cats[r.category]||0)+(toTWD(r.amount,r.currency||"TWD")??0));const entries=Object.entries(cats).sort((x,y)=>y[1]-x[1]);
- document.getElementById("categoryStats").innerHTML=(entries.length?entries:CATEGORIES.map(c=>[c,0])).map(([c,v])=>`<div style="margin:16px 0"><div class="row between"><b>${escapeHtml(c)}</b><b>${money(v)}</b></div><div class="bar"><i style="width:${total?Math.min(100,v/Math.max(...entries.map(x=>x[1]),1)*100):0}%"></i></div></div>`).join("");
+ document.getElementById("categoryStats").innerHTML=(entries.length?entries:CATEGORIES.map(c=>[c,0])).map(([c,v])=>`<div style="margin:16px 0"><div class="row between"><b>${escapeHtml(c)}</b><b>${displayMoney(v)}</b></div><div class="bar"><i style="width:${total?Math.min(100,v/Math.max(...entries.map(x=>x[1]),1)*100):0}%"></i></div></div>`).join("");
  document.getElementById("categoryRank").innerHTML=entries.map(([c,v],i)=>`<div class="rank"><div class="ranknum">${i+1}</div><div><b>${escapeHtml(c)}</b><div class="bar" style="margin-top:6px"><i style="width:${entries[0][1]?v/entries[0][1]*100:0}%"></i></div></div><b>${money(v)}</b></div>`).join("")||'<div class="empty">本月没有支出</div>';
  document.getElementById("statRecords").innerHTML=a.sort((x,y)=>parseDate(y)-parseDate(x)).map(rowHtml).join("")||'<div class="empty">本月没有记录</div>';
 }
@@ -321,7 +361,7 @@ function drawChart(data){
  ctx.fillStyle="#0b84ff";pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5,0,Math.PI*2);ctx.fill()});
 }
 function renderAll(){renderHome();renderAccounts();monthOptions();if(document.getElementById("stats").classList.contains("active"))renderStats()}
-fillCategories();fillCurrencies();load();renderAll();monthOptions();renderStats();updateRateStatus();loadRates();
+fillCategories();fillCurrencies();fillDisplayCurrencies();load();renderAll();monthOptions();renderStats();updateRateStatus();loadRates();
 window.addEventListener("resize",()=>{if(document.getElementById("stats").classList.contains("active"))renderStats()});
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 setInterval(loadRates,30*60*1000);
