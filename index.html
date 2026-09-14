@@ -132,7 +132,7 @@ h2{font-size:31px;margin:0 0 22px}h3{font-size:23px;margin:0 0 16px}
 
 <script>
 const CATEGORIES=["餐饮","交通","购物","生活","娱乐","医疗","其他"];
-const STORAGE_KEY="my-ledger-data-v2";
+const STORAGE_KEY="my-ledger-data-v3";
 let records=[], editingId=null;
 
 function money(n){return "NT$ "+Number(n||0).toLocaleString("zh-TW",{maximumFractionDigits:0})}
@@ -155,7 +155,7 @@ function load(){
   if(Array.isArray(saved)) records=saved.map(normalize).filter(Boolean);
  }catch(e){}
  if(!records.length){
-  const candidates=["my-ledger","my-ledger-data","ledgerData","ledger","expenses","myLedger","records"];
+  const candidates=["my-ledger-data-v2","my-ledger-expenses-v1","my-ledger","my-ledger-data","ledgerData","ledger","expenses","myLedger","records"];
   for(const k of candidates){
    try{const v=JSON.parse(localStorage.getItem(k)||"null");if(Array.isArray(v)){const n=v.map(normalize).filter(Boolean);if(n.length){records=n;break}}}catch(e){}
   }
