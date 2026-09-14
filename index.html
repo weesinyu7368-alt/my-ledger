@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
@@ -7,110 +7,172 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.json">
-<title>我的记账</title>
+<title>我的記帳</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f6f8;color:#17202a}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#f4f6f8;color:#17202a}
 .app{max-width:680px;margin:auto;min-height:100vh;padding-bottom:82px}
 header{background:#0b84ff;color:white;padding:22px 18px 18px;border-radius:0 0 24px 24px}
-h1{margin:0 0 5px;font-size:25px}.sub{opacity:.88;font-size:13px}
+h1{margin:0 0 5px;font-size:25px}.sub{opacity:.9;font-size:13px}
 main{padding:16px}.card{background:white;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px #0000000c}
 .total{font-size:32px;font-weight:800;margin-top:5px}.muted{color:#7a8591;font-size:13px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{padding:13px;background:#f7f9fb;border-radius:14px}.stat b{display:block;font-size:18px;margin-top:4px}
-button,input,select,textarea{font:inherit}button{border:0;border-radius:12px;padding:11px 14px;cursor:pointer}.primary{background:#0b84ff;color:#fff}.danger{background:#ffe9e9;color:#c62828}.secondary{background:#eef3f8;color:#263746}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat{padding:13px;background:#f7f9fb;border-radius:14px}.stat b{display:block;font-size:18px;margin-top:4px}
+button,input,select,textarea{font:inherit}button{border:0;border-radius:12px;padding:11px 14px;cursor:pointer}
+.primary{background:#0b84ff;color:#fff}.danger{background:#ffe9e9;color:#c62828}.secondary{background:#eef3f8;color:#263746}
 .row{display:flex;gap:9px;align-items:center}.between{justify-content:space-between}.actions{display:flex;gap:7px}
 nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);background:#fff;border-top:1px solid #ddd;display:grid;grid-template-columns:repeat(3,1fr);padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:5}
 nav button{background:transparent;color:#687582}nav button.active{color:#0b84ff;font-weight:700}
-label{display:block;font-size:13px;color:#65717d;margin:11px 0 5px}input,select,textarea{width:100%;padding:12px;border:1px solid #dbe1e6;border-radius:12px;background:#fff}textarea{min-height:80px;resize:vertical}
+label{display:block;font-size:13px;color:#65717d;margin:11px 0 5px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #dbe1e6;border-radius:12px;background:#fff}
+textarea{min-height:80px;resize:vertical}
 .record{padding:12px 0;border-bottom:1px solid #edf0f2}.record:last-child{border-bottom:0}.amount{font-weight:800}
-canvas{width:100%;height:240px;border-radius:12px;background:#fbfcfd}
+canvas{width:100%;height:230px;border-radius:12px;background:#fbfcfd}
 .hidden{display:none}.pill{font-size:12px;background:#eaf4ff;color:#0875df;padding:5px 8px;border-radius:20px}
 .empty{text-align:center;padding:30px;color:#87919b}
+.range{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.range button{padding:9px 4px;font-size:12px}
+.range button.active{background:#0b84ff;color:#fff}
+.summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.summary .stat b{font-size:17px}
+.bar{height:9px;background:#edf1f5;border-radius:99px;overflow:hidden;margin-top:7px}.bar i{display:block;height:100%;background:#0b84ff;border-radius:99px}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.legend div{font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:#0b84ff}
+.rank{padding:10px 0;border-bottom:1px solid #edf0f2}.rank:last-child{border-bottom:0}
+.smallbtn{padding:7px 9px;font-size:12px}
 </style>
 </head>
 <body>
 <div class="app">
-<header><h1>我的记账</h1><div class="sub">简单记录每天的每一笔支出</div></header>
+<header><h1>我的記帳</h1><div class="sub">簡單記錄每天的每一筆支出</div></header>
 <main id="home"></main>
 <main id="records" class="hidden"></main>
 <main id="stats" class="hidden"></main>
 </div>
 <nav>
-<button id="nHome" class="active" onclick="showPage('home')">首页</button>
-<button id="nRecords" onclick="showPage('records')">账目</button>
-<button id="nStats" onclick="showPage('stats')">统计</button>
+<button id="nHome" class="active" onclick="showPage('home')">首頁</button>
+<button id="nRecords" onclick="showPage('records')">帳目</button>
+<button id="nStats" onclick="showPage('stats')">統計</button>
 </nav>
 <script>
 const KEY="my-ledger-expenses-v1";
 let data=JSON.parse(localStorage.getItem(KEY)||"[]");
-const cats=["餐饮","交通","购物","生活","娱乐","医疗","其他"];
+const cats=["餐飲","交通","購物","生活","娛樂","醫療","其他"];
+let statsPeriod="month";
 const $=id=>document.getElementById(id);
-const money=n=>"NT$ "+Number(n||0).toLocaleString("zh-TW",{minimumFractionDigits:0});
+const money=n=>"NT$ "+Number(n||0).toLocaleString("zh-TW",{maximumFractionDigits:2});
 const today=()=>{let d=new Date();return d.toISOString().slice(0,10)};
 function save(){localStorage.setItem(KEY,JSON.stringify(data));render()}
 function showPage(p){
  ["home","records","stats"].forEach(x=>$(x).classList.toggle("hidden",x!==p));
  ["nHome","nRecords","nStats"].forEach(x=>$(x).classList.remove("active"));
- $("n"+p[0].toUpperCase()+p.slice(1)).classList.add("active"); render();
+ $("n"+p[0].toUpperCase()+p.slice(1)).classList.add("active");render();
 }
 function addForm(item=null){
- let e=item||{date:today(),time:new Date().toTimeString().slice(0,5),category:"餐饮",amount:"",note:""};
- $("home").innerHTML=`<div class="card"><div class="row between"><h2>${item?"编辑账目":"新增支出"}</h2><button class="secondary" onclick="render()">返回</button></div>
- <label>金额</label><input id="amount" type="number" inputmode="decimal" step="0.01" value="${e.amount}" placeholder="请输入金额">
+ let e=item||{date:today(),time:new Date().toTimeString().slice(0,5),category:"餐飲",amount:"",note:""};
+ $("home").innerHTML=`<div class="card"><div class="row between"><h2>${item?"編輯帳目":"新增支出"}</h2><button class="secondary" onclick="renderHome()">返回</button></div>
+ <label>金額</label><input id="amount" type="number" inputmode="decimal" step="0.01" value="${e.amount}" placeholder="請輸入金額">
  <label>日期</label><input id="date" type="date" value="${e.date}">
- <label>时间</label><input id="time" type="time" value="${e.time}">
- <label>类别</label><select id="category">${cats.map(c=>`<option ${c===e.category?"selected":""}>${c}</option>`).join("")}</select>
- <label>备注</label><textarea id="note" placeholder="可不填写">${e.note||""}</textarea>
- <button class="primary" style="width:100%;margin-top:14px" onclick="saveItem(${item?item.id:"null"})">${item?"保存修改":"保存支出"}</button>
- </div>`;
+ <label>時間</label><input id="time" type="time" value="${e.time}">
+ <label>類別</label><select id="category">${cats.map(c=>`<option ${c===e.category?"selected":""}>${c}</option>`).join("")}</select>
+ <label>備註</label><textarea id="note" placeholder="可不填寫">${e.note||""}</textarea>
+ <button class="primary" style="width:100%;margin-top:14px" onclick="saveItem(${item?item.id:"null"})">${item?"儲存修改":"儲存支出"}</button></div>`;
 }
 function saveItem(id){
  let amount=Number($("amount").value);
- if(!(amount>0)){alert("请输入大于 0 的金额");return}
+ if(!(amount>0)){alert("請輸入大於 0 的金額");return}
  let obj={id:id||Date.now(),amount,date:$("date").value,time:$("time").value,category:$("category").value,note:$("note").value};
  if(id){let i=data.findIndex(x=>x.id===id);if(i>=0)data[i]=obj}else data.push(obj);
- save(); showPage("home");
+ save();showPage("home");
 }
-function del(id){if(confirm("确定删除这笔记录吗？")){data=data.filter(x=>x.id!==id);save()}}
-function edit(id){let x=data.find(a=>a.id===id);if(x)addForm(x)}
+function del(id){if(confirm("確定刪除這筆記錄嗎？")){data=data.filter(x=>x.id!==id);save()}}
+function edit(id){let x=data.find(a=>a.id===id);if(x){showPage("home");addForm(x)}}
 function render(){
- if(!$("home").classList.contains("hidden")) renderHome();
- if(!$("records").classList.contains("hidden")) renderRecords();
- if(!$("stats").classList.contains("hidden")) renderStats();
+ if(!$("home").classList.contains("hidden"))renderHome();
+ if(!$("records").classList.contains("hidden"))renderRecords();
+ if(!$("stats").classList.contains("hidden"))renderStats();
 }
+function dateObj(s){let [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function dateStr(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function renderHome(){
- let t=today(), day=data.filter(x=>x.date===t), total=day.reduce((s,x)=>s+x.amount,0);
- let week=[];for(let i=6;i>=0;i--){let d=new Date();d.setDate(d.getDate()-i);let ds=d.toISOString().slice(0,10);week.push(data.filter(x=>x.date===ds).reduce((s,x)=>s+x.amount,0))}
- let month=t.slice(0,7), mt=data.filter(x=>x.date.startsWith(month)).reduce((s,x)=>s+x.amount,0);
- $("home").innerHTML=`<div class="card"><div class="muted">今天 ${t}</div><div class="total">${money(total)}</div><div class="grid" style="margin-top:15px"><div class="stat"><span class="muted">7天</span><b>${money(week.reduce((a,b)=>a+b,0))}</b></div><div class="stat"><span class="muted">本月</span><b>${money(mt)}</b></div><div class="stat"><span class="muted">笔数</span><b>${day.length}</b></div></div></div>
- <div class="card"><button class="primary" style="width:100%" onclick="addForm()">＋ 记录一笔支出</button></div>
- <div class="card"><div class="row between"><h3>今天的记录</h3><span class="pill">${day.length} 笔</span></div>
- ${day.sort((a,b)=>b.time.localeCompare(a.time)).map(r=>recordHTML(r)).join("")||'<div class="empty">今天还没有记账</div>'}</div>
- <div class="card"><h3>数据管理</h3><div class="row" style="flex-wrap:wrap"><button class="secondary" onclick="exportCSV()">导出 CSV</button><button class="secondary" onclick="backup()">备份 JSON</button><label style="margin:0"><button class="secondary" onclick="$('restore').click()">恢复备份</button></label><input id="restore" type="file" accept=".json" hidden onchange="restore(this)"></div></div>`;
+ let t=today(),day=data.filter(x=>x.date===t),dayTotal=day.reduce((s,x)=>s+Number(x.amount),0);
+ let weekTotal=0;for(let i=0;i<7;i++){let d=new Date();d.setDate(d.getDate()-i);let ds=dateStr(d);weekTotal+=data.filter(x=>x.date===ds).reduce((s,x)=>s+Number(x.amount),0)}
+ let month=t.slice(0,7),mt=data.filter(x=>x.date.startsWith(month)).reduce((s,x)=>s+Number(x.amount),0);
+ $("home").innerHTML=`<div class="card"><div class="muted">今天 ${t}</div><div class="total">${money(dayTotal)}</div>
+ <div class="grid" style="margin-top:15px"><div class="stat"><span class="muted">最近7天</span><b>${money(weekTotal)}</b></div><div class="stat"><span class="muted">本月</span><b>${money(mt)}</b></div><div class="stat"><span class="muted">今日筆數</span><b>${day.length}</b></div><div class="stat"><span class="muted">全部筆數</span><b>${data.length}</b></div></div></div>
+ <div class="card"><button class="primary" style="width:100%" onclick="addForm()">＋ 記錄一筆支出</button></div>
+ <div class="card"><div class="row between"><h3>今天的記錄</h3><span class="pill">${day.length} 筆</span></div>
+ ${day.sort((a,b)=>(b.time||"").localeCompare(a.time||"")).map(recordHTML).join("")||'<div class="empty">今天還沒有記帳</div>'}</div>
+ <div class="card"><h3>資料管理</h3><div class="row" style="flex-wrap:wrap"><button class="secondary" onclick="exportCSV()">匯出 CSV</button><button class="secondary" onclick="backup()">備份 JSON</button><button class="secondary" onclick="$('restore').click()">恢復備份</button><input id="restore" type="file" accept=".json" hidden onchange="restore(this)"></div></div>`;
 }
-function recordHTML(r){return `<div class="record"><div class="row between"><div><b>${r.category}</b><div class="muted">${r.date} ${r.time}${r.note?" · "+r.note:""}</div></div><div class="row"><span class="amount">${money(r.amount)}</span><button class="secondary" onclick="edit(${r.id})">编辑</button><button class="danger" onclick="del(${r.id})">删</button></div></div>`}
+function recordHTML(r){return `<div class="record"><div class="row between"><div><b>${r.category}</b><div class="muted">${r.date} ${r.time||""}${r.note?" · "+escapeHTML(r.note):""}</div></div><div class="row"><span class="amount">${money(r.amount)}</span><button class="secondary smallbtn" onclick="edit(${r.id})">編輯</button><button class="danger smallbtn" onclick="del(${r.id})">刪</button></div></div>`}
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 function renderRecords(){
- let q=($("search")?.value||"").toLowerCase();let arr=data.filter(r=>(r.category+r.note+r.date).toLowerCase().includes(q)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
- $("records").innerHTML=`<div class="card"><div class="row between"><h2>全部账目</h2><button class="primary" onclick="addForm();showPage('home')">＋新增</button></div><input id="search" placeholder="搜索类别、备注或日期" value="${q}" oninput="renderRecords()"></div><div class="card">${arr.map(recordHTML).join("")||'<div class="empty">没有符合条件的记录</div>'}</div>`;
+ let q=($("search")?.value||"").toLowerCase();
+ let arr=data.filter(r=>(r.category+" "+(r.note||"")+" "+r.date).toLowerCase().includes(q)).sort((a,b)=>(b.date+(b.time||"")).localeCompare(a.date+(a.time||"")));
+ $("records").innerHTML=`<div class="card"><div class="row between"><h2>全部帳目</h2><button class="primary" onclick="showPage('home');addForm()">＋新增</button></div><input id="search" placeholder="搜尋類別、備註或日期" value="${escapeHTML(q)}" oninput="renderRecords()"></div><div class="card">${arr.map(recordHTML).join("")||'<div class="empty">沒有符合條件的記錄</div>'}</div>`;
+}
+function getRange(period){
+ let now=dateObj(today()),start,end=now;
+ if(period==="7d"){start=new Date(now);start.setDate(start.getDate()-6)}
+ else if(period==="30d"){start=new Date(now);start.setDate(start.getDate()-29)}
+ else if(period==="month"){start=new Date(now.getFullYear(),now.getMonth(),1)}
+ else if(period==="lastmonth"){start=new Date(now.getFullYear(),now.getMonth()-1,1);end=new Date(now.getFullYear(),now.getMonth(),0)}
+ else {let dates=data.map(x=>dateObj(x.date)).filter(d=>!isNaN(d));start=dates.length?new Date(Math.min(...dates.map(d=>d.getTime()))):now}
+ return {start,end};
+}
+function rangeLabel(p){return {7d:"最近7天",30d:"最近30天",month:"本月",lastmonth:"上月",all:"全部"}[p]}
+function statsData(period){
+ let r=getRange(period);
+ return data.filter(x=>{let d=dateObj(x.date);return d>=r.start&&d<=r.end});
 }
 function renderStats(){
- let month=today().slice(0,7), arr=data.filter(x=>x.date.startsWith(month)), by={};cats.forEach(c=>by[c]=0);arr.forEach(x=>by[x.category]=(by[x.category]||0)+x.amount);
- $("stats").innerHTML=`<div class="card"><div class="row between"><h2>本月趋势</h2><span class="pill">${month}</span></div><canvas id="chart" width="640" height="260"></canvas></div><div class="card"><h3>类别统计</h3>${cats.map(c=>`<div class="row between" style="padding:9px 0;border-bottom:1px solid #eee"><span>${c}</span><b>${money(by[c])}</b></div>`).join("")}</div>`;
- drawChart(month);
+ let arr=statsData(statsPeriod), total=arr.reduce((s,x)=>s+Number(x.amount),0);
+ let days=new Set(arr.map(x=>x.date)).size;
+ let avg=days?total/days:0;
+ let by={};cats.forEach(c=>by[c]=0);arr.forEach(x=>by[x.category]=(by[x.category]||0)+Number(x.amount));
+ let dayMap={};arr.forEach(x=>dayMap[x.date]=(dayMap[x.date]||0)+Number(x.amount));
+ let topDay=Object.entries(dayMap).sort((a,b)=>b[1]-a[1])[0];
+ let maxItem=arr.slice().sort((a,b)=>Number(b.amount)-Number(a.amount))[0];
+ let ranks=cats.map(c=>({c,v:by[c]})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+ let top=Math.max(...ranks.map(x=>x.v),1);
+ $("stats").innerHTML=`<div class="card"><h2 style="margin-top:0">統計分析</h2>
+ <div class="range">${["7d","30d","month","lastmonth","all"].map(p=>`<button class="${p===statsPeriod?"active":""}" onclick="setStatsPeriod('${p}')">${rangeLabel(p)}</button>`).join("")}</div>
+ <div class="muted" style="margin-top:10px">${rangeText(statsPeriod)}</div></div>
+ <div class="card"><div class="summary"><div class="stat"><span class="muted">總支出</span><b>${money(total)}</b></div><div class="stat"><span class="muted">平均每日消費</span><b>${money(avg)}</b></div><div class="stat"><span class="muted">最高消費日</span><b>${topDay?money(topDay[1]):"NT$ 0"}</b><small class="muted">${topDay?topDay[0]:"—"}</small></div><div class="stat"><span class="muted">最大單筆支出</span><b>${maxItem?money(maxItem.amount):"NT$ 0"}</b><small class="muted">${maxItem?maxItem.category+" · "+maxItem.date:"—"}</small></div></div></div>
+ <div class="card"><div class="row between"><h3>每日支出趨勢</h3><span class="pill">${arr.length} 筆</span></div><canvas id="trend" width="640" height="250"></canvas></div>
+ <div class="card"><h3>分類占比</h3><canvas id="pie" width="640" height="250"></canvas><div class="legend">${ranks.map(x=>`<div><span class="dot"></span>${x.c} ${total?Math.round(x.v/total*100):0}%</div>`).join("")||'<div class="muted">沒有資料</div>'}</div></div>
+ <div class="card"><h3>消費分類排行榜</h3>${ranks.map((x,i)=>`<div class="rank"><div class="row between"><span><b>${i+1}.</b> ${x.c}</span><b>${money(x.v)}</b></div><div class="bar"><i style="width:${x.v/top*100}%"></i></div><div class="muted" style="margin-top:4px">${total?((x.v/total)*100).toFixed(1):"0.0"}%</div></div>`).join("")||'<div class="empty">目前沒有統計資料</div>'}</div>`;
+ drawTrend(arr);drawPie(by,total);
 }
-function drawChart(month){
- let c=$("chart"),ctx=c.getContext("2d"),w=c.width,h=c.height,p=35;ctx.clearRect(0,0,w,h);
- let days=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate(), vals=[];
- for(let d=1;d<=days;d++){let ds=month+"-"+String(d).padStart(2,"0");vals.push(data.filter(x=>x.date===ds).reduce((s,x)=>s+x.amount,0))}
- let max=Math.max(...vals,1);ctx.strokeStyle="#d8dee5";ctx.lineWidth=1;for(let i=0;i<4;i++){let y=p+(h-2*p)*i/3;ctx.beginPath();ctx.moveTo(p,y);ctx.lineTo(w-p,y);ctx.stroke()}
+function rangeText(p){let r=getRange(p);return r.start.getTime()===r.end.getTime()?dateStr(r.start):dateStr(r.start)+" ～ "+dateStr(r.end)}
+function setStatsPeriod(p){statsPeriod=p;renderStats()}
+function drawTrend(arr){
+ let c=$("trend"),ctx=c.getContext("2d"),w=c.width,h=c.height,p=38;ctx.clearRect(0,0,w,h);
+ let r=getRange(statsPeriod),days=Math.max(1,Math.round((r.end-r.start)/86400000)+1),vals=[];
+ for(let i=0;i<days;i++){let d=new Date(r.start);d.setDate(d.getDate()+i);let ds=dateStr(d);vals.push(arr.filter(x=>x.date===ds).reduce((s,x)=>s+Number(x.amount),0))}
+ let max=Math.max(...vals,1);
+ ctx.strokeStyle="#d8dee5";ctx.lineWidth=1;for(let i=0;i<4;i++){let y=p+(h-2*p)*i/3;ctx.beginPath();ctx.moveTo(p,y);ctx.lineTo(w-p,y);ctx.stroke()}
  ctx.strokeStyle="#0b84ff";ctx.lineWidth=3;ctx.beginPath();vals.forEach((v,i)=>{let x=p+(w-2*p)*i/(days-1||1),y=h-p-(h-2*p)*v/max;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
  ctx.fillStyle="#0b84ff";vals.forEach((v,i)=>{if(v>0){let x=p+(w-2*p)*i/(days-1||1),y=h-p-(h-2*p)*v/max;ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill()}});
- ctx.fillStyle="#65717d";ctx.font="12px sans-serif";[1,Math.ceil(days/2),days].forEach(d=>{let x=p+(w-2*p)*(d-1)/(days-1||1);ctx.fillText(d+"日",x-10,h-10)})
+ ctx.fillStyle="#65717d";ctx.font="12px sans-serif";let marks=days<=10?[0,days-1]:[0,Math.floor((days-1)/2),days-1];[...new Set(marks)].forEach(i=>{let d=new Date(r.start);d.setDate(d.getDate()+i);let x=p+(w-2*p)*i/(days-1||1);ctx.fillText((d.getMonth()+1)+"/"+d.getDate(),Math.max(2,x-15),h-10)})
 }
-function exportCSV(){let rows=[["日期","时间","类别","金额","备注"],...data.sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).map(x=>[x.date,x.time,x.category,x.amount,x.note||""])];let csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");download("我的记账.csv",new Blob([csv],{type:"text/csv;charset=utf-8"}))}
-function backup(){download("我的记账备份.json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}))}
-function restore(inp){let f=inp.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>{try{let x=JSON.parse(rd.result);if(!Array.isArray(x))throw 0;data=x;save();alert("恢复成功")}catch(e){alert("备份文件格式不正确")}};rd.readAsText(f)}
+function drawPie(by,total){
+ let c=$("pie"),ctx=c.getContext("2d"),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);
+ let vals=cats.map(c=>by[c]),sum=total||1,cx=w/2,cy=h/2,r=Math.min(85,h/2-18),start=-Math.PI/2;
+ let shades=["#0b84ff","#36a3eb","#5bb8e8","#7cc9a5","#f0b35b","#e77b8b","#9b8bd4"];
+ vals.forEach((v,i)=>{if(!v)return;let end=start+v/sum*Math.PI*2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();ctx.fillStyle=shades[i];ctx.fill();start=end});
+ ctx.beginPath();ctx.fillStyle="#fff";ctx.arc(cx,cy,r*.52,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle="#17202a";ctx.textAlign="center";ctx.font="bold 18px sans-serif";ctx.fillText(money(total),cx,cy+5);ctx.textAlign="left";
+}
+function exportCSV(){
+ let rows=[["日期","時間","類別","金額","備註"],...data.slice().sort((a,b)=>(b.date+(b.time||"")).localeCompare(a.date+(a.time||""))).map(x=>[x.date,x.time||"",x.category,x.amount,x.note||""])];
+ let csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");download("我的記帳.csv",new Blob([csv],{type:"text/csv;charset=utf-8"}))
+}
+function backup(){download("我的記帳備份.json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}))}
+function restore(inp){
+ let f=inp.files[0];if(!f)return;let rd=new FileReader();
+ rd.onload=()=>{try{let x=JSON.parse(rd.result);if(!Array.isArray(x))throw 0;data=x;save();alert("恢復成功")}catch(e){alert("備份文件格式不正確")}};rd.readAsText(f)
+}
 function download(name,blob){let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-if("serviceWorker"in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 render();
 </script>
 </body>
